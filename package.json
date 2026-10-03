@@ -5,9 +5,17 @@
   "main": "src/app.js",
   "scripts": {
     "dev": "node --watch src/app.js",
+    "test": "node --test tests/ingestion.test.js tests/rag.test.js tests/api.test.js tests/security.test.js tests/resilience.test.js tests/performance.test.js tests/advisory-lock.test.js",
+    "test:db": "node --test tests/advisory-lock-integration.test.js",
+    "test:live": "node --test tests/live.test.js",
+    "rag:evaluate": "node scripts/rag-evaluate.js",
+    "rag:benchmark": "node scripts/rag-benchmark.js",
+    "db:generate": "drizzle-kit generate",
     "db:push": "npx drizzle-kit push"
   },
   "dependencies": {
+    "@fastify/helmet": "^13.1.1",
+    "@fastify/rate-limit": "^11.2.0",
     "@google/genai": "^2.24.0",
     "dotenv": "^18.0.3",
     "drizzle-orm": "^0.45.3",

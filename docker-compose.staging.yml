@@ -1,0 +1,23 @@
+services:
+  postgres-staging:
+    image: pgvector/pgvector:pg17
+    container_name: bookchatbot-postgres-staging
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: bookchatbot_staging
+      POSTGRES_USER: bookchatbot
+      POSTGRES_PASSWORD: bookchatbot_staging_local
+    ports:
+      - "5433:5432"
+    volumes:
+      - bookchatbot_staging_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bookchatbot -d bookchatbot_staging"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  bookchatbot_staging_data:
+    name: bookchatbot_staging_data

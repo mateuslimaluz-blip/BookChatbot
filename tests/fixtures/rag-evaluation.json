@@ -1,0 +1,202 @@
+[
+  {
+    "id": "eval-001",
+    "category": "character_description",
+    "query": "Quem foi Capitu e como ela é descrita em Dom Casmurro?",
+    "bookId": "a1b2c3d4-0001-4000-8000-000000000001",
+    "bookTitle": "Dom Casmurro",
+    "expectedTopics": ["olhos de ressaca", "cigana oblíqua e dissimulada", "Bentinho"],
+    "expectedChunkIndices": [0, 1],
+    "expectedNoAnswer": false
+  },
+  {
+    "id": "eval-002",
+    "category": "thematic_concept",
+    "query": "O que é a teoria do Humanitismo descrita por Quincas Borba?",
+    "bookId": "a1b2c3d4-0002-4000-8000-000000000002",
+    "bookTitle": "Quincas Borba",
+    "expectedTopics": ["ao vencedor as batatas", "filosofia", "humanitas", "princípio"],
+    "expectedChunkIndices": [0, 2],
+    "expectedNoAnswer": false
+  },
+  {
+    "id": "eval-003",
+    "category": "factual_opening",
+    "query": "Como Brás Cubas inicia suas memórias e a quem ele dedica a obra?",
+    "bookId": "a1b2c3d4-0003-4000-8000-000000000003",
+    "bookTitle": "Memórias Póstumas de Brás Cubas",
+    "expectedTopics": ["autor defunto", "verme", "dedicatória", "saudosa lembrança"],
+    "expectedChunkIndices": [0],
+    "expectedNoAnswer": false
+  },
+  {
+    "id": "eval-004",
+    "category": "plot_resolution",
+    "query": "Qual foi a causa da morte de Quincas Borba e o que aconteceu com seu cão?",
+    "bookId": "a1b2c3d4-0002-4000-8000-000000000002",
+    "bookTitle": "Quincas Borba",
+    "expectedTopics": ["doença", "loucura", "cão Quincas Borba", "Rubião"],
+    "expectedChunkIndices": [3],
+    "expectedNoAnswer": false
+  },
+  {
+    "id": "eval-005",
+    "category": "thematic_concept",
+    "query": "Qual a teoria de Simão Bacamarte sobre a loucura em O Alienista?",
+    "bookId": "a1b2c3d4-0004-4000-8000-000000000004",
+    "bookTitle": "O Alienista",
+    "expectedTopics": ["razão e loucura", "Itaguaí", "desequilíbrio mental", "ciência"],
+    "expectedChunkIndices": [0, 1],
+    "expectedNoAnswer": false
+  },
+  {
+    "id": "eval-006",
+    "category": "factual_setting",
+    "query": "Como funcionava a Casa Verde de Itaguaí sob a direção de Bacamarte?",
+    "bookId": "a1b2c3d4-0004-4000-8000-000000000004",
+    "bookTitle": "O Alienista",
+    "expectedTopics": ["asilo", "internamento", "Câmara de vereadores", "Casa Verde"],
+    "expectedChunkIndices": [1, 2],
+    "expectedNoAnswer": false
+  },
+  {
+    "id": "eval-007",
+    "category": "plot_event",
+    "query": "Qual o papel e a profecia da cartomante no conto A Cartomante?",
+    "bookId": "a1b2c3d4-0005-4000-8000-000000000005",
+    "bookTitle": "A Cartomante",
+    "expectedTopics": ["cartas", "profecia", "Hamlet", "Camilo", "Rita"],
+    "expectedChunkIndices": [0, 1],
+    "expectedNoAnswer": false
+  },
+  {
+    "id": "eval-008",
+    "category": "plot_resolution",
+    "query": "Qual o desfecho trágico do triângulo amoroso entre Camilo, Rita e Vilela?",
+    "bookId": "a1b2c3d4-0005-4000-8000-000000000005",
+    "bookTitle": "A Cartomante",
+    "expectedTopics": ["assassinato", "carta anônima", "Vilela", "vingança"],
+    "expectedChunkIndices": [2],
+    "expectedNoAnswer": false
+  },
+  {
+    "id": "eval-009",
+    "category": "thematic_description",
+    "query": "Como o cortiço de João Romão é descrito em sua transformação social e física?",
+    "bookId": "a1b2c3d4-0006-4000-8000-000000000006",
+    "bookTitle": "O Cortiço",
+    "expectedTopics": ["habitação coletiva", "João Romão", "formigueiro", "prosperidade"],
+    "expectedChunkIndices": [0, 1],
+    "expectedNoAnswer": false
+  },
+  {
+    "id": "eval-010",
+    "category": "character_description",
+    "query": "Quem foi Bertoleza e qual seu destino na história de O Cortiço?",
+    "bookId": "a1b2c3d4-0006-4000-8000-000000000006",
+    "bookTitle": "O Cortiço",
+    "expectedTopics": ["escrava", "alforria falsa", "suicídio", "trabalho incansável"],
+    "expectedChunkIndices": [0, 3],
+    "expectedNoAnswer": false
+  },
+  {
+    "id": "eval-011",
+    "category": "character_relationship",
+    "query": "Como Bentinho e Escobar se conheceram no seminário em Dom Casmurro?",
+    "bookId": "a1b2c3d4-0001-4000-8000-000000000001",
+    "bookTitle": "Dom Casmurro",
+    "expectedTopics": ["seminário de São José", "amizade", "cálculo e ambição", "Escobar"],
+    "expectedChunkIndices": [2],
+    "expectedNoAnswer": false
+  },
+  {
+    "id": "eval-012",
+    "category": "plot_conflict",
+    "query": "O que levou Bentinho a desconfiar da traição de Capitu com Escobar?",
+    "bookId": "a1b2c3d4-0001-4000-8000-000000000001",
+    "bookTitle": "Dom Casmurro",
+    "expectedTopics": ["olhar no enterro", "semelhança de Ezequiel", "ciúme", "afogamento"],
+    "expectedChunkIndices": [3, 4],
+    "expectedNoAnswer": false
+  },
+  {
+    "id": "eval-013",
+    "category": "famous_quote",
+    "query": "Quem foi Marcela e qual a famosa frase sobre a duração do amor de Brás Cubas por ela?",
+    "bookId": "a1b2c3d4-0003-4000-8000-000000000003",
+    "bookTitle": "Memórias Póstumas de Brás Cubas",
+    "expectedTopics": ["amou-me durante quinze meses e onze contos de réis", "cortesã", "joias"],
+    "expectedChunkIndices": [1],
+    "expectedNoAnswer": false
+  },
+  {
+    "id": "eval-014",
+    "category": "thematic_concept",
+    "query": "O que foi a ideia fixa do Emplasto Brás Cubas e qual seu propósito?",
+    "bookId": "a1b2c3d4-0003-4000-8000-000000000003",
+    "bookTitle": "Memórias Póstumas de Brás Cubas",
+    "expectedTopics": ["medicamento milagroso", "glória", "alívio da melancolia", "ideia fixa"],
+    "expectedChunkIndices": [2],
+    "expectedNoAnswer": false
+  },
+  {
+    "id": "eval-015",
+    "category": "plot_event",
+    "query": "Como Rubião herdou a fortuna de Quincas Borba e que condições foram impostas?",
+    "bookId": "a1b2c3d4-0002-4000-8000-000000000002",
+    "bookTitle": "Quincas Borba",
+    "expectedTopics": ["testamento", "cuidar do cão", "herdeiro universal", "Barbacena"],
+    "expectedChunkIndices": [1],
+    "expectedNoAnswer": false
+  },
+  {
+    "id": "eval-016",
+    "category": "character_development",
+    "query": "Como Jerônimo muda seus hábitos e personalidade após conviver no cortiço?",
+    "bookId": "a1b2c3d4-0006-4000-8000-000000000006",
+    "bookTitle": "O Cortiço",
+    "expectedTopics": ["português trabalhador", "Rita Baiana", "violão e cachaça", "transformação"],
+    "expectedChunkIndices": [2],
+    "expectedNoAnswer": false
+  },
+  {
+    "id": "eval-017",
+    "category": "unanswerable_out_of_domain",
+    "query": "Qual a fórmula matemática da relatividade geral e a dedução da equação de campo de Einstein?",
+    "bookId": null,
+    "bookTitle": null,
+    "expectedTopics": [],
+    "expectedChunkIndices": [],
+    "expectedNoAnswer": true
+  },
+  {
+    "id": "eval-018",
+    "category": "unanswerable_out_of_domain",
+    "query": "Como configurar um cluster Kubernetes com balanceamento de carga de alta disponibilidade no AWS EKS?",
+    "bookId": null,
+    "bookTitle": null,
+    "expectedTopics": [],
+    "expectedChunkIndices": [],
+    "expectedNoAnswer": true
+  },
+  {
+    "id": "eval-019",
+    "category": "unanswerable_out_of_domain",
+    "query": "Qual é a receita culinária autêntica do bolo de fubá cremoso tradicional de Minas Gerais?",
+    "bookId": null,
+    "bookTitle": null,
+    "expectedTopics": [],
+    "expectedChunkIndices": [],
+    "expectedNoAnswer": true
+  },
+  {
+    "id": "eval-020",
+    "category": "unanswerable_out_of_domain",
+    "query": "Quais são as regras oficiais de pontuação e pit stop da temporada atual da Fórmula 1?",
+    "bookId": null,
+    "bookTitle": null,
+    "expectedTopics": [],
+    "expectedChunkIndices": [],
+    "expectedNoAnswer": true
+  }
+]

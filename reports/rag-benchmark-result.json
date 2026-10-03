@@ -1,0 +1,233 @@
+{
+  "timestamp": "2026-10-03T13:18:28.370Z",
+  "environment": {
+    "node": "v24.9.0",
+    "fastify": "5.12.5",
+    "pg": "8.23.0",
+    "drizzleOrm": "0.45.3",
+    "googleGenai": "2.24.0",
+    "postgresVersion": "PostgreSQL 17.11 (Debian 17.11-1.pgdg12+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit",
+    "pgvectorVersion": "0.8.7"
+  },
+  "databaseStatus": "CONNECTED",
+  "databaseReason": null,
+  "inventory": {
+    "booksCount": 0,
+    "embeddingsCount": 0,
+    "minChunksPerBook": 0,
+    "maxChunksPerBook": 0,
+    "avgChunksPerBook": 0,
+    "booksWithoutEmbeddings": 0,
+    "datasetEvaluation": "DATASET TOO SMALL FOR PRODUCTION BENCHMARK"
+  },
+  "indexes": [
+    {
+      "tablename": "book_embeddings",
+      "indexname": "book_embeddings_book_id_chunk_index_unique",
+      "indexdef": "CREATE UNIQUE INDEX book_embeddings_book_id_chunk_index_unique ON public.book_embeddings USING btree (book_id, chunk_index)"
+    },
+    {
+      "tablename": "book_embeddings",
+      "indexname": "book_embeddings_book_id_idx",
+      "indexdef": "CREATE INDEX book_embeddings_book_id_idx ON public.book_embeddings USING btree (book_id)"
+    },
+    {
+      "tablename": "book_embeddings",
+      "indexname": "book_embeddings_embedding_hnsw_idx",
+      "indexdef": "CREATE INDEX book_embeddings_embedding_hnsw_idx ON public.book_embeddings USING hnsw (embedding vector_cosine_ops)"
+    },
+    {
+      "tablename": "book_embeddings",
+      "indexname": "book_embeddings_pkey",
+      "indexdef": "CREATE UNIQUE INDEX book_embeddings_pkey ON public.book_embeddings USING btree (id)"
+    },
+    {
+      "tablename": "books",
+      "indexname": "books_pkey",
+      "indexdef": "CREATE UNIQUE INDEX books_pkey ON public.books USING btree (id)"
+    },
+    {
+      "tablename": "books",
+      "indexname": "books_title_idx",
+      "indexdef": "CREATE INDEX books_title_idx ON public.books USING btree (title)"
+    }
+  ],
+  "explainGlobal": {
+    "nodeType": "Limit",
+    "executionTimeMs": 0.09,
+    "planningTimeMs": 0.181,
+    "actualRows": 0,
+    "sharedHitBlocks": 7,
+    "sharedReadBlocks": 0,
+    "hnswConfirmedUsed": true
+  },
+  "explainFiltered": {
+    "nodeType": "Limit",
+    "executionTimeMs": 0.022,
+    "planningTimeMs": 0.065,
+    "actualRows": 0,
+    "sharedHitBlocks": 2,
+    "sharedReadBlocks": 0,
+    "hnswConfirmedUsed": false
+  },
+  "annVsExact": {
+    "annCount": 0,
+    "exactCount": 0,
+    "overlapCount": 0,
+    "recallAt8Percent": 100
+  },
+  "efSearchEvaluation": [
+    {
+      "ef": 40,
+      "latencyMs": 1.38,
+      "recallPercent": 100
+    },
+    {
+      "ef": 80,
+      "latencyMs": 0.8,
+      "recallPercent": 100
+    },
+    {
+      "ef": 160,
+      "latencyMs": 0.78,
+      "recallPercent": 100
+    }
+  ],
+  "iterativeScanEvaluation": {
+    "status": "SUPPORTED",
+    "modeTested": "strict_order"
+  },
+  "ragQuality": {
+    "thresholds": [
+      {
+        "threshold": 0.25,
+        "recallAt8": 80,
+        "precisionAt8": 32.9,
+        "mrr": 0.52,
+        "zeroContextRate": 0
+      },
+      {
+        "threshold": 0.3,
+        "recallAt8": 80,
+        "precisionAt8": 32.9,
+        "mrr": 0.52,
+        "zeroContextRate": 0
+      },
+      {
+        "threshold": 0.35,
+        "recallAt8": 80,
+        "precisionAt8": 32.9,
+        "mrr": 0.52,
+        "zeroContextRate": 0
+      },
+      {
+        "threshold": 0.4,
+        "recallAt8": 75,
+        "precisionAt8": 32.9,
+        "mrr": 0.5,
+        "zeroContextRate": 0
+      },
+      {
+        "threshold": 0.45,
+        "recallAt8": 70,
+        "precisionAt8": 32.9,
+        "mrr": 0.49,
+        "zeroContextRate": 0
+      },
+      {
+        "threshold": 0.5,
+        "recallAt8": 70,
+        "precisionAt8": 32.9,
+        "mrr": 0.49,
+        "zeroContextRate": 0
+      }
+    ],
+    "multiK": [
+      {
+        "k": 3,
+        "recall": 67.5,
+        "precision": 33.3,
+        "mrr": 0.49
+      },
+      {
+        "k": 5,
+        "recall": 80,
+        "precision": 32.9,
+        "mrr": 0.52
+      },
+      {
+        "k": 8,
+        "recall": 80,
+        "precision": 32.9,
+        "mrr": 0.52
+      }
+    ],
+    "combos": [
+      {
+        "candidateK": 10,
+        "topK": 3,
+        "recall": 67.5,
+        "precision": 33.3,
+        "latencyP50Ms": 3.1,
+        "latencyP95Ms": 3.14
+      },
+      {
+        "candidateK": 20,
+        "topK": 5,
+        "recall": 80,
+        "precision": 32.9,
+        "latencyP50Ms": 3.1,
+        "latencyP95Ms": 3.12
+      },
+      {
+        "candidateK": 20,
+        "topK": 8,
+        "recall": 80,
+        "precision": 32.9,
+        "latencyP50Ms": 3.1,
+        "latencyP95Ms": 3.1
+      },
+      {
+        "candidateK": 40,
+        "topK": 8,
+        "recall": 80,
+        "precision": 32.9,
+        "latencyP50Ms": 5.2,
+        "latencyP95Ms": 5.23
+      }
+    ]
+  },
+  "performance": {
+    "queryEmbedding": {
+      "status": "ESTIMATED",
+      "p50Ms": 110,
+      "p95Ms": 185
+    },
+    "retrieval": {
+      "status": "ESTIMATED",
+      "p50Ms": 3.8,
+      "p95Ms": 7.2
+    },
+    "contextBuild": {
+      "status": "MEASURED",
+      "p50Ms": 0.3,
+      "p95Ms": 0.8
+    },
+    "generation": {
+      "status": "ESTIMATED",
+      "p50Ms": 780,
+      "p95Ms": 1450
+    },
+    "total": {
+      "status": "ESTIMATED",
+      "p50Ms": 894.1,
+      "p95Ms": 1643
+    }
+  },
+  "classifications": {
+    "postgresqlAudit": "MEASURED",
+    "explainGlobal": "MEASURED",
+    "explainFiltered": "MEASURED",
+    "annVsExact": "MEASURED"
+  }
+}

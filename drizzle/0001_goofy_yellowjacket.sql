@@ -1,0 +1,2 @@
+ALTER TABLE "books" DROP CONSTRAINT "books_content_or_path_check";--> statement-breakpoint
+ALTER TABLE "books" ADD CONSTRAINT "books_content_or_path_check" CHECK (("books"."content" IS NOT NULL AND length(trim("books"."content")) > 0) OR ("books"."content_path" IS NOT NULL AND length(trim("books"."content_path")) > 0));
