@@ -44,6 +44,16 @@ export const env = {
   RATE_LIMIT_CHAT_MAX: Number(process.env.RATE_LIMIT_CHAT_MAX) || 30,
   RATE_LIMIT_SEARCH_MAX: Number(process.env.RATE_LIMIT_SEARCH_MAX) || 60,
   RATE_LIMIT_INGEST_MAX: Number(process.env.RATE_LIMIT_INGEST_MAX) || 5,
+  RATE_LIMIT_BOOKS_MAX: Number(process.env.RATE_LIMIT_BOOKS_MAX) || 60,
+
+  // CORS (Cross-Origin Resource Sharing)
+  CORS_ORIGIN:
+    process.env.CORS_ORIGIN ||
+    'http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000',
+
+  // Upload de Arquivos de Livros (Multipart)
+  MAX_UPLOAD_FILE_SIZE_BYTES:
+    Number(process.env.MAX_UPLOAD_FILE_SIZE_BYTES) || 5_242_880, // 5MB
 
   // Controle de Taxa Gemini (TPM - Tokens Por Minuto) e Worker em Segundo Plano
   GEMINI_EMBEDDING_TPM_LIMIT: Number(process.env.GEMINI_EMBEDDING_TPM_LIMIT) || 20_000,

@@ -1,6 +1,8 @@
 import Fastify from 'fastify';
+import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import multipart from '@fastify/multipart';
 import { env, validateProductionEnv } from './config/env.js';
 import { closeDatabase } from './config/db.js';
 import { apiRoutes } from './routes/api.js';
@@ -43,13 +45,38 @@ export function buildApp(options = {}) {
     ...options,
   });
 
-  // 1. Headers de Segurança HTTP
+  // 1. CORS (Cross-Origin Resource Sharing)
+  const allowedOrigins = env.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean);
+  app.register(cors, {
+    origin: (origin, cb) => {
+      // Permite requisições sem origin (curl, Postman, mobile) ou se estiver na lista autorizada
+      if (!origin || allowedOrigins.includes(origin) || env.NODE_ENV === 'development') {
+        cb(null, true);
+        return;
+      }
+      cb(new Error(`Origem "${origin}" não permitida pela política de CORS.`), false);
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true,
+  });
+
+  // 2. Headers de Segurança HTTP
   app.register(helmet, {
     contentSecurityPolicy: false, // Desabilitado para APIs puras JSON
     crossOriginEmbedderPolicy: false,
   });
 
-  // 2. Rate Limiting Global
+  // 3. Suporte a Multipart/Form-Data para Upload de Livros TXT
+  app.register(multipart, {
+    limits: {
+      fileSize: env.MAX_UPLOAD_FILE_SIZE_BYTES,
+      files: 1,
+      fields: 10,
+    },
+    attachFieldsToBody: false,
+  });
+
+  // 4. Rate Limiting Global
   app.register(rateLimit, {
     max: env.RATE_LIMIT_GLOBAL_MAX,
     timeWindow: '1 minute',
