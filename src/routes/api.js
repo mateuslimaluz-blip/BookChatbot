@@ -1,4 +1,7 @@
-import { ingestBookHandler } from '../controllers/bookController.js';
+import {
+  ingestBookHandler,
+  getIngestionJobHandler,
+} from '../controllers/bookController.js';
 import {
   chatHandler,
   searchRelevantChunksHandler,
@@ -36,6 +39,21 @@ const ingestParamsSchema = {
     additionalProperties: false,
     properties: {
       id: {
+        type: 'string',
+        pattern:
+          '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+      },
+    },
+  },
+};
+
+const jobParamsSchema = {
+  params: {
+    type: 'object',
+    required: ['jobId'],
+    additionalProperties: false,
+    properties: {
+      jobId: {
         type: 'string',
         pattern:
           '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
@@ -82,7 +100,7 @@ export async function apiRoutes(fastify) {
     searchRelevantChunksHandler
   );
 
-  // Rota de Ingestão RAG de Livro
+  // Rota de Ingestão RAG de Livro (Enfileiramento Assíncrono - Retorna HTTP 202)
   fastify.post(
     '/books/:id/ingest',
     {
@@ -95,6 +113,15 @@ export async function apiRoutes(fastify) {
       },
     },
     ingestBookHandler
+  );
+
+  // Rota de Consulta de Status e Progresso de Job de Ingestão
+  fastify.get(
+    '/ingestion-jobs/:jobId',
+    {
+      schema: jobParamsSchema,
+    },
+    getIngestionJobHandler
   );
 
   // Liveness Probe (Verifica se o processo Fastify está ativo)

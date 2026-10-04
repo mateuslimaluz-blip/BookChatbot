@@ -4,6 +4,7 @@ import rateLimit from '@fastify/rate-limit';
 import { env, validateProductionEnv } from './config/env.js';
 import { closeDatabase } from './config/db.js';
 import { apiRoutes } from './routes/api.js';
+import { ingestionWorker } from './services/ingestionWorker.js';
 
 // Valida variáveis obrigatórias no início
 validateProductionEnv();
@@ -38,7 +39,7 @@ export function buildApp(options = {}) {
       },
     },
     bodyLimit: env.HTTP_BODY_LIMIT_BYTES,
-    connectionTimeout: env.HTTP_HANDLER_TIMEOUT_MS,
+    connectionTimeout: env.HTTP_HANDLER_TIMEOUT_MS, // Configura Node.js server.connectionTimeout (inatividade no socket), não o tempo do handler
     ...options,
   });
 
@@ -146,6 +147,19 @@ export function buildApp(options = {}) {
   app.register(apiRoutes, { prefix: '/api' });
   app.register(apiRoutes);
 
+  // 6. Ciclo de Vida do Worker de Ingestão em Segundo Plano
+  if (env.INGESTION_WORKER_ENABLED && env.NODE_ENV !== 'test') {
+    app.addHook('onReady', async () => {
+      app.log.info('[Worker] Inicializando IngestionWorker em segundo plano...');
+      await ingestionWorker.start();
+    });
+
+    app.addHook('onClose', async () => {
+      app.log.info('[Worker] Parando IngestionWorker...');
+      await ingestionWorker.stop();
+    });
+  }
+
   return app;
 }
 
@@ -157,6 +171,9 @@ const app = buildApp();
 export async function gracefulShutdown(signal) {
   app.log.info(`[Shutdown] Recebido sinal ${signal}. Encerrando servidor graciosamente...`);
   try {
+    if (env.INGESTION_WORKER_ENABLED) {
+      await ingestionWorker.stop();
+    }
     await app.close();
     await closeDatabase();
     app.log.info('[Shutdown] Servidor e conexões de banco de dados encerrados com sucesso.');

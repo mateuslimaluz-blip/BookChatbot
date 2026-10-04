@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { env } from '../config/env.js';
 import { EMBEDDING_DIMENSION } from '../db/schema.js';
+import { embeddingRateLimiter } from './geminiRateLimiter.js';
 
 // Inicializa o cliente oficial do Google Gemini utilizando a chave de API das variáveis de ambiente
 const ai = new GoogleGenAI({
@@ -86,7 +87,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * @param {number} [options.baseDelayMs=500] - Delay base para backoff progressivo
  * @returns {Promise<number[]>} Array com 768 valores numéricos representando o embedding
  */
-export async function generateEmbedding(text, { maxRetries = 3, baseDelayMs = 500 } = {}) {
+export async function generateEmbedding(
+  text,
+  { maxRetries = 3, baseDelayMs = 500, isPriority = false } = {}
+) {
   if (!text || typeof text !== 'string' || text.trim() === '') {
     throw new Error('O texto para geração de embedding não pode ser vazio ou nulo.');
   }
@@ -96,6 +100,9 @@ export async function generateEmbedding(text, { maxRetries = 3, baseDelayMs = 50
 
   while (attempt <= maxRetries) {
     try {
+      // 1. Adquire orçamento de tokens na janela móvel de 60s antes de chamar o Gemini
+      await embeddingRateLimiter.acquire(text, { isPriority });
+
       const response = await ai.models.embedContent({
         model: EMBEDDING_MODEL,
         contents: text,
@@ -130,6 +137,16 @@ export async function generateEmbedding(text, { maxRetries = 3, baseDelayMs = 50
       attempt++;
       lastError = error;
 
+      // 2. Trata erros de taxa 429 / RESOURCE_EXHAUSTED
+      const rateLimitInfo = embeddingRateLimiter.handleRateLimitError(error);
+      if (rateLimitInfo.isRateLimit) {
+        error.isRateLimit = true;
+        error.retryAfterMs = rateLimitInfo.retryAfterMs;
+        error.isDailyQuota = rateLimitInfo.isDailyQuota;
+        // Não realiza retries rápidos (500ms/1s/2s) para erro de cota; lança imediatamente
+        throw error;
+      }
+
       // Erros de validação e dimensionalidade não devem sofrer retry
       if (
         error.message?.includes('não pode ser vazio') ||
@@ -160,24 +177,24 @@ export async function generateEmbedding(text, { maxRetries = 3, baseDelayMs = 50
  *
  * @param {string} title - Título do livro
  * @param {string} chunk - Texto do chunk
- * @param {object} [options] - Opções de retry
+ * @param {object} [options] - Opções adicionais
  * @returns {Promise<number[]>} Vetor de 768 dimensões
  */
-export async function generateChunkEmbedding(title, chunk, options) {
+export async function generateChunkEmbedding(title, chunk, options = {}) {
   const formattedText = formatChunkForEmbedding(title, chunk);
-  return generateEmbedding(formattedText, options);
+  return generateEmbedding(formattedText, { ...options, isPriority: false });
 }
 
 /**
- * Gera o embedding formatado para uma query de busca.
+ * Gera o embedding formatado para uma query de busca (prioritária no rate limiter).
  *
  * @param {string} query - Pergunta do usuário
- * @param {object} [options] - Opções de retry
+ * @param {object} [options] - Opções adicionais
  * @returns {Promise<number[]>} Vetor de 768 dimensões
  */
-export async function generateQueryEmbedding(query, options) {
+export async function generateQueryEmbedding(query, options = {}) {
   const formattedQuery = formatQueryForEmbedding(query);
-  return generateEmbedding(formattedQuery, options);
+  return generateEmbedding(formattedQuery, { ...options, isPriority: true });
 }
 
 /**

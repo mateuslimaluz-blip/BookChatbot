@@ -34,7 +34,7 @@ export const env = {
   MAX_QUERY_CHARS: Number(process.env.MAX_QUERY_CHARS) || 4_000,
   MAX_CONTEXT_CHARS: Number(process.env.MAX_CONTEXT_CHARS) || 25_000,
 
-  // Timeouts e Limites HTTP Fastify
+  // Timeouts e Limites HTTP Fastify (connectionTimeout do socket Node.js)
   HTTP_HANDLER_TIMEOUT_MS: Number(process.env.HTTP_HANDLER_TIMEOUT_MS) || 45_000,
   HTTP_BODY_LIMIT_BYTES: Number(process.env.HTTP_BODY_LIMIT_BYTES) || 1_048_576, // 1MB global
   HTTP_JSON_BODY_LIMIT_BYTES: Number(process.env.HTTP_JSON_BODY_LIMIT_BYTES) || 65_536, // 64KB para rotas JSON
@@ -44,6 +44,12 @@ export const env = {
   RATE_LIMIT_CHAT_MAX: Number(process.env.RATE_LIMIT_CHAT_MAX) || 30,
   RATE_LIMIT_SEARCH_MAX: Number(process.env.RATE_LIMIT_SEARCH_MAX) || 60,
   RATE_LIMIT_INGEST_MAX: Number(process.env.RATE_LIMIT_INGEST_MAX) || 5,
+
+  // Controle de Taxa Gemini (TPM - Tokens Por Minuto) e Worker em Segundo Plano
+  GEMINI_EMBEDDING_TPM_LIMIT: Number(process.env.GEMINI_EMBEDDING_TPM_LIMIT) || 20_000,
+  INGESTION_WORKER_ENABLED: process.env.INGESTION_WORKER_ENABLED !== 'false',
+  INGESTION_WORKER_POLL_INTERVAL_MS: Number(process.env.INGESTION_WORKER_POLL_INTERVAL_MS) || 2_000,
+  INGESTION_JOB_MAX_ATTEMPTS: Number(process.env.INGESTION_JOB_MAX_ATTEMPTS) || 5,
 };
 
 /**
