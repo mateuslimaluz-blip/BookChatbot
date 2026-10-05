@@ -97,8 +97,38 @@ export async function chatHandler(request, reply) {
       });
     }
 
+    // Tratamento de limite de taxa / cota excedida (HTTP 429)
+    const is429 =
+      error.status === 429 ||
+      error.statusCode === 429 ||
+      error.isRateLimit === true ||
+      /429|RESOURCE_EXHAUSTED|Quota exceeded|rate limit|quota metric/i.test(errorMessage);
+
+    if (is429) {
+      return reply.status(429).send({
+        success: false,
+        code: 'RATE_LIMIT_EXCEEDED',
+        error: 'O serviço de inteligência artificial atingiu temporariamente o limite de requisições ou cota. Por favor, aguarde alguns instantes e tente novamente.',
+      });
+    }
+
+    // Tratamento de indisponibilidade / sobrecarga temporária do modelo (HTTP 503)
+    const is503 =
+      error.status === 503 ||
+      error.statusCode === 503 ||
+      /503|UNAVAILABLE|overloaded|Service Unavailable|temporarily unavailable|Timeout na chamada/i.test(errorMessage);
+
+    if (is503) {
+      return reply.status(503).send({
+        success: false,
+        code: 'SERVICE_UNAVAILABLE',
+        error: 'O modelo de inteligência artificial está temporariamente ocupado ou sobrecarregado. Por favor, tente novamente em instantes.',
+      });
+    }
+
     return reply.status(500).send({
       success: false,
+      code: 'INTERNAL_SERVER_ERROR',
       error: 'Falha interna ao processar a resposta do chatbot.',
     });
   }

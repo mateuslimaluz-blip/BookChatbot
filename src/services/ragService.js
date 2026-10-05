@@ -208,19 +208,277 @@ ${item.content.trim()}`;
 }
 
 /**
+ * Identifica se a pergunta do usuário é uma saudação (ex: "Olá", "Bom dia", "Oi")
+ * ou uma pergunta sobre o propósito/como usar o aplicativo (ex: "o que você faz?", "como posso usar o BookChatbot?").
+ *
+ * @param {string} query
+ * @returns {boolean}
+ */
+export function isGreetingOrHelpQuery(query) {
+  if (!query || typeof query !== 'string') return false;
+
+  const norm = query
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!norm) return false;
+
+  // Se a pergunta menciona termos de conteúdo textual ou análise interna de obra, não é saudação/ajuda pura
+  const contentKeywords = [
+    'capitulo', 'personagem', 'enredo', 'resumo', 'resuma', 'sinopse',
+    'significa', 'acontece', 'morre', 'morte', 'citacao', 'cite', 'frase',
+    'analise', 'do que fala', 'sobre o que fala', 'sobre o que trata',
+    'o que diz', 'qual a mensagem', 'qual a moral', 'como termina', 'inicio',
+    'quem foi', 'estrategia', 'vencer', 'guerra', 'morte de'
+  ];
+
+  if (contentKeywords.some((kw) => norm.includes(kw))) {
+    return false;
+  }
+
+  // Saudações comuns puras
+  const pureGreetings = [
+    'ola', 'oi', 'oie', 'opa', 'ola tudo bem', 'oi tudo bem', 'e ai',
+    'bom dia', 'boa tarde', 'boa noite', 'tudo bem', 'como vai',
+    'ola como vai', 'oi como vai', 'ola bom dia', 'ola boa tarde', 'ola boa noite'
+  ];
+
+  if (pureGreetings.includes(norm)) {
+    return true;
+  }
+
+  // Padrões de saudações combinadas e perguntas sobre o aplicativo
+  const greetingOrHelpPatterns = [
+    /^(?:ola\s+|oi\s+|oie\s+|opa\s+|bom dia\s+|boa tarde\s+|boa noite\s+)?o\s+que\s+(?:voce\s+)?faz\??$/,
+    /^(?:ola\s+|oi\s+)?como\s+(?:posso\s+|podemos\s+|eu\s+posso\s+)?usar\s+(?:o\s+)?(?:bookchatbot|chatbot|chat|aplicativo|app|sistema)\??$/,
+    /como\s+(?:posso\s+|podemos\s+)?usar\s+(?:o\s+)?(?:bookchatbot|chatbot|chat|aplicativo|app|sistema)/,
+    /^(?:ola\s+|oi\s+)?quem\s+(?:e\s+voce|voce\s+e)\??$/,
+    /^(?:ola\s+|oi\s+)?qual\s+(?:e\s+o\s+)?seu\s+nome\??$/,
+    /^(?:ola\s+|oi\s+)?para\s+que\s+(?:voce\s+)?serve\??$/,
+    /^(?:ola\s+|oi\s+)?como\s+(?:voce\s+)?funciona\??$/,
+    /^(?:ola\s+|oi\s+)?como\s+funciona\s+(?:o\s+)?(?:bookchatbot|aplicativo|app|sistema)\??$/,
+    /^(?:ola\s+|oi\s+)?qual\s+(?:e\s+)?(?:a\s+)?(?:sua\s+)?funcao\??$/,
+    /^(?:ola\s+|oi\s+)?qual\s+(?:e\s+)?(?:o\s+)?(?:seu\s+)?objetivo\??$/,
+    /^(?:ajuda|socorro|help|me\s+ajuda|preciso\s+de\s+ajuda)\??$/,
+    /o\s+que\s+(?:eu\s+)?posso\s+(?:perguntar|fazer|consultar)\s+(?:aqui|com\s+voce)/
+  ];
+
+  return greetingOrHelpPatterns.some((pattern) => pattern.test(norm));
+}
+
+/**
+ * Retorna a resposta direta para saudações e dúvidas sobre o funcionamento do BookChatbot.
+ *
+ * @param {object} [options]
+ * @param {string|null} [options.selectedBookTitle]
+ * @returns {string}
+ */
+export function formatAppInfoAnswer({ selectedBookTitle = null } = {}) {
+  const base =
+    'Olá! Eu sou o assistente do BookChatbot. Minha função é responder a perguntas e analisar conteúdos fundamentados nos livros cadastrados e disponíveis no catálogo.\n\nVocê pode me fazer perguntas sobre o enredo, personagens e ideias das obras disponíveis, ou perguntar "Quais livros você tem?" para ver as obras prontas para consulta.';
+
+  if (selectedBookTitle) {
+    return `${base}\n\n*Nota: Sua conversa atual está filtrada no livro "${selectedBookTitle}". Para consultar todas as obras do catálogo, utilize o "Acervo Geral".*`;
+  }
+
+  return base;
+}
+
+/**
+ * Identifica se a pergunta do usuário é uma consulta sobre o catálogo de livros disponíveis no acervo,
+ * diferenciando-a de perguntas que tratam do conteúdo textual interno de uma obra.
+ *
+ * @param {string} query
+ * @returns {boolean}
+ */
+export function isCatalogQuery(query) {
+  if (!query || typeof query !== 'string') return false;
+
+  const norm = query
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Termos típicos de busca de conteúdo/enredo interno que desqualificam a pergunta como catálogo puro
+  const contentKeywords = [
+    'capitulo', 'personagem', 'enredo', 'resumo', 'resuma', 'sinopse',
+    'significa', 'acontece', 'morre', 'morte', 'citacao', 'cite', 'frase',
+    'analise', 'do que fala', 'sobre o que fala', 'sobre o que trata',
+    'o que diz', 'qual a mensagem', 'qual a moral', 'como termina', 'inicio',
+    'quem foi', 'quem e', 'estrategia', 'vencer', 'guerra', 'morte de'
+  ];
+
+  for (const kw of contentKeywords) {
+    if (norm.includes(kw)) {
+      return false;
+    }
+  }
+
+  // Padrões específicos que solicitam a lista de livros, obras disponíveis ou catálogo
+  const catalogPatterns = [
+    /(?:sobre|de)?\s*quais\s+(?:livros|obras|titulos)\s+(?:voce\s+)?(?:pode|consegue|sabe)\s+(?:falar|responder|tratar|conversar)/,
+    /(?:quais|que)\s+(?:livros|obras|titulos)\s+(?:voce\s+)?(?:tem|possui|conhece|disponibiliza)/,
+    /(?:quais|que)\s+(?:sao\s+)?(?:os\s+|as\s+)?(?:livros|obras|titulos)\s+(?:estao\s+)?(?:disponiveis|cadastrados|no acervo|na biblioteca|no catalogo|prontos|prontas)/,
+    /^(?:quais\s+)?(?:livros|obras|titulos)\s+disponiveis(?:\s+para\s+consulta)?$/,
+    /o\s+que\s+(?:voce\s+)?tem\s+(?:no acervo|na biblioteca|no catalogo)/,
+    /qual\s+(?:e\s+)?(?:o\s+)?(?:catalogo|acervo|biblioteca)/,
+    /(?:listar|liste|lista\s+de|mostrar|mostre|ver)\s+(?:os\s+|as\s+)?(?:livros|obras|titulos|catalogo|acervo)/,
+    /sobre\s+(?:o\s+que|quais\s+assuntos)\s+(?:voce\s+)?(?:pode|consegue|sabe)\s+(?:falar|responder|conversar)/,
+    /(?:quais|que)\s+(?:livros|obras)\s+(?:posso|podemos|consigo)\s+(?:consultar|pesquisar|perguntar|acessar|ler)/,
+    /^quais\s+(?:sao\s+)?(?:os\s+|as\s+)?(?:livros|obras)(?:\s+cadastrados|\s+no\s+sistema|\s+no\s+acervo)?$/
+  ];
+
+  return catalogPatterns.some((pattern) => pattern.test(norm));
+}
+
+/**
+ * Consulta o estado real do catálogo de livros no PostgreSQL, verificando a existência
+ * de embeddings em book_embeddings e o status do job de ingestão mais recente.
+ *
+ * @param {object} [dbInstance=db]
+ * @returns {Promise<{
+ *   readyBooks: Array<{ id: string, title: string, author: string }>,
+ *   pendingBooks: Array<{ id: string, title: string, author: string, status: string }>,
+ *   failedBooks: Array<{ id: string, title: string, author: string }>,
+ * }>}
+ */
+export async function getCatalogStatus(dbInstance = db) {
+  const result = await dbInstance.execute(sql`
+    SELECT
+      b.id,
+      b.title,
+      b.author,
+      EXISTS(SELECT 1 FROM book_embeddings be WHERE be.book_id = b.id) AS "hasEmbeddings",
+      (
+        SELECT j.status
+        FROM ingestion_jobs j
+        WHERE j.book_id = b.id
+        ORDER BY j.created_at DESC
+        LIMIT 1
+      ) AS "jobStatus"
+    FROM books b
+    ORDER BY b.title ASC;
+  `);
+
+  const readyBooks = [];
+  const pendingBooks = [];
+  const failedBooks = [];
+
+  for (const row of result.rows || []) {
+    const item = {
+      id: row.id,
+      title: row.title,
+      author: row.author,
+      hasEmbeddings: Boolean(row.hasEmbeddings),
+      jobStatus: row.jobStatus || null,
+    };
+
+    // Disponível apenas se possui embeddings gerados e não está em estado de falha
+    if (item.hasEmbeddings && (item.jobStatus === 'completed' || !item.jobStatus)) {
+      readyBooks.push(item);
+    } else if (
+      item.jobStatus === 'queued' ||
+      item.jobStatus === 'running' ||
+      item.jobStatus === 'waiting_retry'
+    ) {
+      pendingBooks.push(item);
+    } else if (item.jobStatus === 'failed' || (!item.hasEmbeddings && item.jobStatus)) {
+      failedBooks.push(item);
+    } else {
+      pendingBooks.push(item);
+    }
+  }
+
+  return { readyBooks, pendingBooks, failedBooks };
+}
+
+/**
+ * Formata a resposta textual do catálogo de livros cadastrados.
+ * Lista apenas obras com processamento concluído como disponíveis para consulta,
+ * explicitando obras que estejam pendentes de ingestão ou com falha.
+ *
+ * @param {object} catalog
+ * @param {object} [options]
+ * @param {string|null} [options.selectedBookId]
+ * @returns {string}
+ */
+export function formatCatalogAnswer(
+  { readyBooks = [], pendingBooks = [], failedBooks = [] },
+  { selectedBookId = null } = {}
+) {
+  if (readyBooks.length === 0 && pendingBooks.length === 0 && failedBooks.length === 0) {
+    return 'No momento, não há nenhum livro cadastrado no acervo do BookChatbot.';
+  }
+
+  const sections = [];
+
+  if (readyBooks.length > 0) {
+    const list = readyBooks
+      .map((b, i) => `${i + 1}. **${b.title}** — ${b.author || 'Autor desconhecido'}`)
+      .join('\n');
+
+    sections.push(
+      `Atualmente, posso falar sobre os seguintes livros disponíveis no catálogo:\n\n${list}\n\nEssas obras já foram processadas e estão prontas para consulta com busca semântica e citações de trechos.`
+    );
+  } else {
+    sections.push(
+      'No momento, nenhuma obra cadastrada possui processamento de embeddings concluído para consulta.'
+    );
+  }
+
+  if (pendingBooks.length > 0) {
+    const pendingList = pendingBooks
+      .map((b) => `- **${b.title}** — ${b.author || 'Autor n/d'} (em processamento de ingestão)`)
+      .join('\n');
+    sections.push(
+      `Obras em processamento (ainda não disponíveis para perguntas):\n${pendingList}`
+    );
+  }
+
+  if (failedBooks.length > 0) {
+    const failedList = failedBooks
+      .map((b) => `- **${b.title}** — ${b.author || 'Autor n/d'} (falha na ingestão; requer reprocessamento)`)
+      .join('\n');
+    sections.push(
+      `Obras com falha registrada no processamento:\n${failedList}`
+    );
+  }
+
+  if (selectedBookId) {
+    const currentSelected = readyBooks.find((b) => b.id === selectedBookId);
+    if (currentSelected) {
+      sections.push(
+        `*Nota: Sua conversa atual está filtrada no contexto de "${currentSelected.title}". Para perguntar sobre todo o catálogo, você pode alternar para "Acervo Geral".*`
+      );
+    }
+  }
+
+  return sections.join('\n\n');
+}
+
+/**
  * Orquestra o fluxo completo do Chat RAG:
  * 1. Validação de entrada;
- * 2. Recuperação vetorial de chunks relevantes no PostgreSQL via pgvector;
- * 3. Se não houver contexto suficiente, responde diretamente sem chamar o LLM;
- * 4. Montagem de contexto estruturado e seguro com deduplicação;
- * 5. Chamada ao modelo generativo do Gemini;
- * 6. Validação e reconciliação das fontes citadas com os metadados reais do banco.
+ * 2. Detecção de perguntas sobre o catálogo de livros disponíveis (respondidas via catálogo real);
+ * 3. Recuperação vetorial de chunks relevantes no PostgreSQL via pgvector;
+ * 4. Se não houver contexto suficiente, responde diretamente sem chamar o LLM;
+ * 5. Montagem de contexto estruturado e seguro com deduplicação;
+ * 6. Chamada ao modelo generativo do Gemini;
+ * 7. Validação e reconciliação das fontes citadas com os metadados reais do banco.
  *
  * @param {string} query - Pergunta do usuário
  * @param {object} [options] - Opções de execução
  * @param {string} [options.bookId] - ID opcional do livro para busca filtrada
  * @param {function} [options.retrievalFn] - Função de retrieval injetável para testes
  * @param {function} [options.generateFn] - Função generativa injetável para testes
+ * @param {object} [options.dbInstance] - Instância de banco injetável
  * @returns {Promise<{ success: boolean, query: string, answer: string, sources: Array<object> }>}
  */
 export async function executeRagChat(
@@ -229,12 +487,69 @@ export async function executeRagChat(
     bookId = null,
     retrievalFn = retrieveRelevantChunks,
     generateFn = generateRagResponse,
+    dbInstance = db,
   } = {}
 ) {
-  // 1. Executa a recuperação vetorial
-  const retrievalResult = await retrievalFn(query, { bookId });
+  // 1. Validação básica da query
+  if (!query || typeof query !== 'string' || query.trim() === '') {
+    throw new Error('A pergunta para busca não pode ser vazia ou nula.');
+  }
 
-  // 2. Se não houver resultados relevantes acima do limiar, retorna fallback seguro
+  const cleanQuery = query.trim();
+  if (cleanQuery.length > MAX_QUERY_CHARS) {
+    throw new Error(
+      `A pergunta excede o limite máximo permitido de ${MAX_QUERY_CHARS} caracteres.`
+    );
+  }
+
+  // 2. Se for saudação ou pergunta sobre a função do aplicativo, responde diretamente sem buscar trechos, gerar embedding ou chamar o Gemini
+  if (isGreetingOrHelpQuery(cleanQuery)) {
+    let selectedBookTitle = null;
+    if (bookId) {
+      try {
+        const [book] = await dbInstance
+          .select({ title: books.title })
+          .from(books)
+          .where(eq(books.id, bookId))
+          .limit(1);
+        selectedBookTitle = book?.title || null;
+      } catch {
+        selectedBookTitle = null;
+      }
+    }
+
+    const answer = formatAppInfoAnswer({ selectedBookTitle });
+    return {
+      success: true,
+      query: cleanQuery,
+      answer,
+      sources: [],
+    };
+  }
+
+  // 3. Se a pergunta for sobre os livros do acervo / catálogo disponíveis, responde pelo catálogo cadastrado
+  if (isCatalogQuery(cleanQuery)) {
+    const catalog = await getCatalogStatus(dbInstance);
+    const answer = formatCatalogAnswer(catalog, { selectedBookId: bookId });
+    const sources = catalog.readyBooks.map((b, index) => ({
+      sourceId: index + 1,
+      bookId: b.id,
+      title: b.title,
+      author: b.author,
+    }));
+
+    return {
+      success: true,
+      query: cleanQuery,
+      answer,
+      sources,
+    };
+  }
+
+  // 3. Executa a recuperação vetorial de trechos
+  const retrievalResult = await retrievalFn(cleanQuery, { bookId, dbInstance });
+
+  // 4. Se não houver resultados relevantes acima do limiar, retorna fallback seguro
   if (!retrievalResult.results || retrievalResult.results.length === 0) {
     return {
       success: true,
@@ -244,7 +559,7 @@ export async function executeRagChat(
     };
   }
 
-  // 3. Monta o contexto delimitado
+  // 5. Monta o contexto delimitado
   const { contextText, sourcesMap } = buildContextFromChunks(retrievalResult.results);
 
   if (!contextText) {
@@ -256,13 +571,13 @@ export async function executeRagChat(
     };
   }
 
-  // 4. Invoca o modelo generativo
+  // 6. Invoca o modelo generativo
   const modelResponse = await generateFn({
     query: retrievalResult.query,
     context: contextText,
   });
 
-  // 5. Valida e reconcilia as fontes citadas com os metadados reais
+  // 7. Valida e reconcilia as fontes citadas com os metadados reais
   const validatedSources = [];
   const addedSourceIds = new Set();
 

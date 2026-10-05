@@ -31,6 +31,7 @@ async function handleResponse(response) {
 
     const error = new Error(errorMessage);
     error.status = response.status;
+    error.code = data?.code || data?.error?.code;
     error.data = data;
     throw error;
   }

@@ -1,281 +1,466 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { sendChatMessage, listBooks } from '../api.js';
+import React, { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
+import { sendChatMessage } from '../api.js';
 
 /**
- * Interface do Chatbot RAG: seleção de contexto (Acervo Geral ou Livro Específico),
- * histórico de mensagens interativas e exibição de citações com fontes verificadas.
- *
- * @param {object} props
- * @param {string|null} props.initialBookId - ID do livro pré-selecionado ao vir da Biblioteca
- * @param {function} props.onGoToLibrary - Permite navegar de volta à Biblioteca
+ * ChatView - Interface do Chatbot RAG.
+ * Implementa exatamente os estados visuais das referências:
+ * - Estado inicial (Imagem 2): Título "O QUE VAMOS VER HOJE?" e pill bar centralizados na tela
+ * - Ação '+' (Imagem 3): Dropdown pill "ADICIONAR LIVRO" diretamente abaixo da barra
+ * - Conversação ativa: Histórico de mensagens com citações e pill bar fixada no rodapé
  */
-export function ChatView({ initialBookId = null, onGoToLibrary }) {
-  const [selectedBookId, setSelectedBookId] = useState(initialBookId || '');
-  const [availableBooks, setAvailableBooks] = useState([]);
+export const ChatView = forwardRef(function ChatView(
+  {
+    selectedBookId = '',
+    onSelectBookId,
+    availableBooks = [],
+    onOpenAddBookModal,
+    onRefreshBooks,
+  },
+  ref
+) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [plusOpen, setPlusOpen] = useState(false);
+
+  const [lastFailedQuery, setLastFailedQuery] = useState(null);
 
   const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
+  const plusDropdownRef = useRef(null);
 
-  // Carrega a lista de livros que possuem embeddings para popular o seletor de contexto
-  useEffect(() => {
-    async function loadBooksForSelector() {
-      try {
-        const data = await listBooks({ page: 1, limit: 100 });
-        setAvailableBooks(data.books || []);
-      } catch (err) {
-        console.warn('Falha ao carregar lista de livros para o seletor de chat:', err.message);
-      }
-    }
-    loadBooksForSelector();
-  }, []);
-
-  // Sincroniza se o initialBookId mudar
-  useEffect(() => {
-    if (initialBookId) {
-      setSelectedBookId(initialBookId);
-    }
-  }, [initialBookId]);
-
-  // Rolagem automática para a mensagem mais recente
+  // Rolagem suave para a mensagem mais recente
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  const handleSendMessage = async (e) => {
+  // Fecha o dropdown do '+' ao clicar fora
+  useEffect(() => {
+    function handleGlobalClick(e) {
+      if (
+        plusOpen &&
+        plusDropdownRef.current &&
+        !plusDropdownRef.current.contains(e.target)
+      ) {
+        setPlusOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleGlobalClick);
+    return () => document.removeEventListener('mousedown', handleGlobalClick);
+  }, [plusOpen]);
+
+  // Expõe métodos imperativos para o componente pai
+  useImperativeHandle(
+    ref,
+    () => ({
+      resetChat: () => {
+        setMessages([]);
+        setErrorMessage(null);
+        setLastFailedQuery(null);
+        setInputText('');
+      },
+      focusInput: () => {
+        inputRef.current?.focus();
+      },
+    }),
+    []
+  );
+
+  /**
+   * Executa o envio da pergunta para o endpoint POST /chat.
+   * Se addUserMessage for false, não duplica a bolha do usuário no histórico (modo retry).
+   */
+  const executeSend = useCallback(
+    async (query, addUserMessage = true) => {
+      if (!query || isLoading) return;
+
+      setErrorMessage(null);
+      setPlusOpen(false);
+
+      if (addUserMessage) {
+        const userMessage = {
+          id: `user-${Date.now()}`,
+          role: 'user',
+          text: query,
+          timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        };
+        setMessages((prev) => [...prev, userMessage]);
+        setInputText('');
+      }
+
+      setIsLoading(true);
+
+      try {
+        const response = await sendChatMessage({
+          query,
+          bookId: selectedBookId || null,
+        });
+
+        const answerText = response?.answer || 'Não foi possível obter resposta para esta consulta.';
+        const sourcesList = Array.isArray(response?.sources) ? response.sources : [];
+
+        const assistantMessage = {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          text: answerText,
+          sources: sourcesList,
+          timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        };
+
+        setMessages((prev) => [...prev, assistantMessage]);
+        setLastFailedQuery(null);
+      } catch (err) {
+        let friendlyMessage = err.message || 'Ocorreu um erro ao obter a resposta do chatbot. Tente novamente.';
+
+        // Erro 429: limite de taxa / esgotamento de cota
+        if (
+          err.status === 429 ||
+          err.code === 'RATE_LIMIT_EXCEEDED' ||
+          /429|cota|limite de requisições|RESOURCE_EXHAUSTED/i.test(friendlyMessage)
+        ) {
+          friendlyMessage =
+            'O modelo de IA está temporariamente limitado por cota ou taxa de requisições. Aguarde alguns instantes e clique em "Tentar novamente".';
+        }
+        // Erro 503: serviço ocupado / indisponibilidade temporária
+        else if (
+          err.status === 503 ||
+          err.code === 'SERVICE_UNAVAILABLE' ||
+          /503|sobrecarregado|ocupado|UNAVAILABLE|Timeout/i.test(friendlyMessage)
+        ) {
+          friendlyMessage =
+            'O modelo de inteligência artificial está temporariamente ocupado ou sobrecarregado. Clique em "Tentar novamente" em instantes.';
+        }
+
+        setErrorMessage(friendlyMessage);
+        setLastFailedQuery(query);
+      } finally {
+        setIsLoading(false);
+        setTimeout(() => inputRef.current?.focus(), 50);
+      }
+    },
+    [isLoading, selectedBookId]
+  );
+
+  const handleSendMessage = (e) => {
     e?.preventDefault();
     const query = inputText.trim();
-
     if (!query || isLoading) return;
+    executeSend(query, true);
+  };
 
-    setErrorMessage(null);
-
-    // Mensagem enviada pelo usuário
-    const userMessage = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      text: query,
-      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setInputText('');
-    setIsLoading(true);
-
-    try {
-      const response = await sendChatMessage({
-        query,
-        bookId: selectedBookId || null,
-      });
-
-      // Só adiciona a mensagem do assistente se houver resposta válida
-      const answerText = response?.answer || 'Não foi possível obter resposta para esta consulta.';
-      const sourcesList = Array.isArray(response?.sources) ? response.sources : [];
-
-      const assistantMessage = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        text: answerText,
-        sources: sourcesList,
-        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (err) {
-      // Exibe a mensagem de erro da API sem inserir uma mensagem quebrada no array do chat
-      setErrorMessage(
-        err.message || 'Ocorreu um erro ao obter a resposta do chatbot. Tente novamente.'
-      );
-    } finally {
-      setIsLoading(false);
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
     }
   };
 
   const selectedBook = availableBooks.find((b) => b.id === selectedBookId);
+  const hasMessages = messages.length > 0 || isLoading;
 
   return (
-    <div className="chat-container" role="region" aria-label="Painel de Chat RAG">
-      {/* Cabeçalho de Contexto */}
-      <div className="chat-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <label htmlFor="context-select" style={{ fontSize: '0.875rem', fontWeight: '600', color: 'var(--text-secondary)' }}>
-            Contexto da Conversa:
-          </label>
-          <select
-            id="context-select"
-            className="chat-context-select"
-            value={selectedBookId}
-            onChange={(e) => setSelectedBookId(e.target.value)}
-            disabled={isLoading}
-          >
-            <option value="">🌐 Acervo Geral (Todos os livros ingeridos)</option>
-            {availableBooks.map((b) => (
-              <option key={b.id} value={b.id} disabled={!b.hasEmbeddings}>
-                {b.title} {b.author ? `— ${b.author}` : ''} {!b.hasEmbeddings ? '(Pendente Ingestão)' : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {selectedBook && !selectedBook.hasEmbeddings && (
-          <div style={{ fontSize: '0.8125rem', color: 'var(--danger)', fontWeight: '500' }}>
-            ⚠️ Este livro ainda não possui embeddings. As respostas utilizarão o acervo geral até a conclusão da ingestão.
-          </div>
-        )}
-      </div>
-
-      {/* Área de Mensagens */}
-      <div className="chat-messages" aria-live="polite">
-        {messages.length === 0 ? (
-          <div className="state-box" style={{ margin: 'auto', border: 'none', background: 'transparent' }}>
-            <div className="state-icon" aria-hidden="true">💡</div>
-            <h2 style={{ fontSize: '1.125rem', fontWeight: '700', marginBottom: '0.5rem' }}>
-              Faça uma pergunta sobre as obras
-            </h2>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', maxWidth: '420px', margin: '0 auto' }}>
-              {selectedBook
-                ? `O chatbot responderá fundamentado nos trechos e capítulos do livro "${selectedBook.title}".`
-                : 'O chatbot buscará semanticamente nos embeddings de todo o acervo e citará as fontes encontradas.'}
-            </p>
-          </div>
-        ) : (
-          messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`chat-bubble ${msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-assistant'}`}
+    <div className={`chat-view ${hasMessages ? 'chat-view--active' : 'chat-view--empty'}`}>
+      {/* SELETOR DE CONTEXTO (Exibido no topo quando há mensagens ativas) */}
+      {hasMessages && (
+        <div className="chat-top-context">
+          <div className="context-indicator">
+            <span className="context-label">Contexto:</span>
+            <select
+              className="context-select"
+              value={selectedBookId}
+              onChange={(e) => onSelectBookId?.(e.target.value)}
+              disabled={isLoading}
+              aria-label="Selecionar livro de contexto"
             >
-              <div style={{ whiteSpace: 'pre-wrap' }}>{msg.text || ''}</div>
+              <option value="">🌐 Acervo Geral (Todos os livros)</option>
+              {availableBooks.map((b) => (
+                <option key={b.id} value={b.id} disabled={!b.hasEmbeddings}>
+                  {b.title} {b.author ? `— ${b.author}` : ''} {!b.hasEmbeddings ? '(Sem embeddings)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
 
-              {/* Citações e Fontes verificadas retornadas pelo RAG */}
-              {msg.role === 'assistant' && Array.isArray(msg.sources) && msg.sources.length > 0 && (
-                <div className="chat-sources">
-                  <div className="chat-sources-title">
-                    Fontes Consultadas ({msg.sources.length}):
-                  </div>
-                  {msg.sources.map((src, index) => {
-                    if (!src || typeof src !== 'object') return null;
+          <button
+            type="button"
+            className="btn-clear-chat"
+            onClick={() => {
+              setMessages([]);
+              setErrorMessage(null);
+            }}
+            title="Limpar conversa atual"
+          >
+            Limpar conversa
+          </button>
+        </div>
+      )}
 
-                    const title = src.title || src.bookTitle || 'Obra do Acervo';
-                    const author = src.author ? ` — ${src.author}` : '';
-                    const chunkLabel =
-                      typeof src.chunkIndex === 'number'
-                        ? ` (Trecho #${src.chunkIndex + 1})`
-                        : src.sourceId
-                        ? ` (Fonte #${src.sourceId})`
-                        : '';
-                    const hasSimilarity = typeof src.similarity === 'number';
-                    const contentText = typeof src.content === 'string' ? src.content.trim() : '';
+      {/* ÁREA DE MENSAGENS OU ESTADO INICIAL */}
+      <div className="chat-scroll-area">
+        {!hasMessages ? (
+          /* ESTADO INICIAL (IMAGEM 2 & IMAGEM 3): Título + Input Pill centralizados */
+          <div className="chat-hero">
+            <h1 className="chat-hero-title">O QUE VAMOS VER HOJE?</h1>
 
-                    return (
-                      <div key={src.sourceId || index} className="source-item">
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            fontWeight: '600',
-                            marginBottom: contentText ? '0.25rem' : '0',
-                          }}
-                        >
-                          <span>
-                            📖 {title}{author}{chunkLabel}
-                          </span>
-                          {hasSimilarity && (
-                            <span style={{ color: 'var(--primary)', fontSize: '0.75rem' }}>
-                              Similaridade: {(src.similarity * 100).toFixed(1)}%
-                            </span>
-                          )}
-                        </div>
-                        {contentText ? (
-                          <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic', fontSize: '0.75rem' }}>
-                            "{contentText.length > 180 ? `${contentText.substring(0, 180)}...` : contentText}"
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
+            <div className="pill-container" ref={plusDropdownRef}>
+              <form className="pill-bar" onSubmit={handleSendMessage}>
+                <button
+                  type="button"
+                  className={`pill-btn-plus ${plusOpen ? 'pill-btn-plus--active' : ''}`}
+                  onClick={() => setPlusOpen((v) => !v)}
+                  title="Ações"
+                  aria-label="Ações de livro"
+                  aria-expanded={plusOpen}
+                >
+                  <PlusCircleIcon />
+                </button>
+
+                <input
+                  ref={inputRef}
+                  type="text"
+                  className="pill-text-input"
+                  placeholder="QUAL O LIVRO DE HOJE?"
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  disabled={isLoading}
+                  autoFocus
+                  aria-label="Pergunta sobre o livro"
+                />
+
+                <button
+                  type="submit"
+                  className="pill-btn-send"
+                  disabled={isLoading || !inputText.trim()}
+                  title="Enviar pergunta"
+                  aria-label="Enviar"
+                >
+                  {isLoading ? <span className="spinner-pill" /> : <PlayNextIcon />}
+                </button>
+              </form>
+
+              {/* DROPDOWN "+" (IMAGEM 3): "📎 ADICIONAR LIVRO" */}
+              {plusOpen && (
+                <div className="plus-action-dropdown">
+                  <button
+                    type="button"
+                    className="plus-action-btn"
+                    onClick={() => {
+                      setPlusOpen(false);
+                      onOpenAddBookModal?.();
+                    }}
+                  >
+                    <PaperclipIcon />
+                    <span>ADICIONAR LIVRO</span>
+                  </button>
                 </div>
               )}
-
-              <div
-                style={{
-                  fontSize: '0.6875rem',
-                  color: msg.role === 'user' ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)',
-                  marginTop: '0.375rem',
-                  textAlign: 'right',
-                }}
-              >
-                {msg.timestamp}
-              </div>
             </div>
-          ))
-        )}
 
-        {isLoading && (
-          <div className="chat-bubble chat-bubble-assistant" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span className="spinner spinner-dark"></span>
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-              Consultando vetores no pgvector e formulando resposta fundamentada...
-            </span>
+            {selectedBook && (
+              <div className="hero-context-note">
+                Contexto ativo: <strong>{selectedBook.title}</strong>{' '}
+                <button
+                  type="button"
+                  className="hero-context-reset"
+                  onClick={() => onSelectBookId?.('')}
+                >
+                  (usar acervo geral)
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* HISTÓRICO DE MENSAGENS ATIVAS */
+          <div className="chat-messages-list" aria-live="polite">
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`chat-bubble ${
+                  msg.role === 'user' ? 'chat-bubble--user' : 'chat-bubble--assistant'
+                }`}
+              >
+                <div className="chat-bubble-content">{msg.text}</div>
+
+                {/* Fontes verificadas do RAG */}
+                {msg.role === 'assistant' && Array.isArray(msg.sources) && msg.sources.length > 0 && (
+                  <div className="chat-sources-block">
+                    <div className="chat-sources-header">
+                      Fontes Consultadas ({msg.sources.length}):
+                    </div>
+                    {msg.sources.map((src, index) => {
+                      if (!src || typeof src !== 'object') return null;
+                      const title = src.title || src.bookTitle || 'Obra do Acervo';
+                      const author = src.author ? ` — ${src.author}` : '';
+                      const chunkLabel =
+                        typeof src.chunkIndex === 'number'
+                          ? ` (Trecho #${src.chunkIndex + 1})`
+                          : src.sourceId
+                          ? ` (Fonte #${src.sourceId})`
+                          : '';
+                      const contentText = typeof src.content === 'string' ? src.content.trim() : '';
+
+                      return (
+                        <div key={src.sourceId || index} className="source-card">
+                          <div className="source-card-header">
+                            <span>📖 {title}{author}{chunkLabel}</span>
+                            {typeof src.similarity === 'number' && (
+                              <span className="source-similarity">
+                                {(src.similarity * 100).toFixed(1)}% similaridade
+                              </span>
+                            )}
+                          </div>
+                          {contentText && (
+                            <div className="source-card-snippet">
+                              "{contentText.length > 180 ? `${contentText.substring(0, 180)}...` : contentText}"
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="chat-bubble-time">{msg.timestamp}</div>
+              </div>
+            ))}
+
+            {isLoading && (
+              <div className="chat-bubble chat-bubble--assistant chat-bubble--loading">
+                <span className="spinner spinner-dark" />
+                <span>Consultando vetores no pgvector e formulando resposta...</span>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
           </div>
         )}
-
-        <div ref={messagesEndRef} />
       </div>
 
+      {/* BANNER DE ERRO COM BOTÃO DE RETRY */}
       {errorMessage && (
-        <div style={{ padding: '0.5rem 1.25rem' }}>
-          <div className="alert alert-danger" style={{ margin: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span aria-hidden="true">⚠️</span>
-              <span>{errorMessage}</span>
-            </div>
+        <div className="chat-error-bar" role="alert">
+          <div className="chat-error-text">
+            <span aria-hidden="true">⚠️</span>
+            <span>{errorMessage}</span>
+          </div>
+          <div className="chat-error-actions">
+            {lastFailedQuery && (
+              <button
+                type="button"
+                className="chat-retry-btn"
+                onClick={() => executeSend(lastFailedQuery, false)}
+                disabled={isLoading}
+                title="Tentar enviar esta pergunta novamente"
+              >
+                🔄 Tentar novamente
+              </button>
+            )}
             <button
               type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => setErrorMessage(null)}
-              style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+              className="chat-error-close"
+              onClick={() => {
+                setErrorMessage(null);
+                setLastFailedQuery(null);
+              }}
+              title="Fechar alerta"
             >
-              Fechar
+              ✕
             </button>
           </div>
         </div>
       )}
 
-      {/* Barra de Entrada de Pergunta */}
-      <form className="chat-input-bar" onSubmit={handleSendMessage}>
-        <input
-          type="text"
-          className="chat-input"
-          placeholder={
-            selectedBook
-              ? `Pergunte algo sobre "${selectedBook.title}"...`
-              : 'Pergunte algo sobre os livros do acervo...'
-          }
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          disabled={isLoading}
-          aria-label="Pergunta para o chatbot"
-        />
+      {/* BARRA DE ENTRADA FIXADA (Exibida no rodapé quando há mensagens) */}
+      {hasMessages && (
+        <div className="chat-footer-dock">
+          <div className="pill-container" ref={plusDropdownRef}>
+            <form className="pill-bar" onSubmit={handleSendMessage}>
+              <button
+                type="button"
+                className={`pill-btn-plus ${plusOpen ? 'pill-btn-plus--active' : ''}`}
+                onClick={() => setPlusOpen((v) => !v)}
+                title="Ações"
+                aria-label="Ações de livro"
+                aria-expanded={plusOpen}
+              >
+                <PlusCircleIcon />
+              </button>
 
-        <button
-          type="submit"
-          className="btn btn-primary"
-          disabled={isLoading || !inputText.trim()}
-          title="Enviar pergunta"
-        >
-          {isLoading ? (
-            <span className="spinner"></span>
-          ) : (
-            <>
-              <span>Enviar</span>
-              <span aria-hidden="true">➤</span>
-            </>
-          )}
-        </button>
-      </form>
+              <input
+                ref={inputRef}
+                type="text"
+                className="pill-text-input"
+                placeholder="QUAL O LIVRO DE HOJE?"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={isLoading}
+                aria-label="Pergunta sobre o livro"
+              />
+
+              <button
+                type="submit"
+                className="pill-btn-send"
+                disabled={isLoading || !inputText.trim()}
+                title="Enviar pergunta"
+                aria-label="Enviar"
+              >
+                {isLoading ? <span className="spinner-pill" /> : <PlayNextIcon />}
+              </button>
+            </form>
+
+            {/* DROPDOWN "+" */}
+            {plusOpen && (
+              <div className="plus-action-dropdown">
+                <button
+                  type="button"
+                  className="plus-action-btn"
+                  onClick={() => {
+                    setPlusOpen(false);
+                    onOpenAddBookModal?.();
+                  }}
+                >
+                  <PaperclipIcon />
+                  <span>ADICIONAR LIVRO</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
+});
+
+/* ── ÍCONES SVG DA INTERFACE ────────────────────────────────────────── */
+
+function PlusCircleIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="16" />
+      <line x1="8" y1="12" x2="16" y2="12" />
+    </svg>
+  );
 }
+
+function PlayNextIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polygon points="5 4 17 12 5 20 5 4" fill="none" stroke="currentColor" />
+      <line x1="19" y1="4" x2="19" y2="20" stroke="currentColor" />
+    </svg>
+  );
+}
+
+function PaperclipIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    </svg>
+  );
+}
+
+export default ChatView;
