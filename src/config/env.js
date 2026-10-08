@@ -17,10 +17,18 @@ export const env = {
   DB_CONNECTION_TIMEOUT_MS: Number(process.env.DB_CONNECTION_TIMEOUT_MS) || 10_000,
   DB_IDLE_TIMEOUT_MS: Number(process.env.DB_IDLE_TIMEOUT_MS) || 30_000,
 
-  // Google Gemini API
+  // Provedor de IA para Respostas do Chat RAG ('gemini' | 'ollama')
+  AI_CHAT_PROVIDER: (process.env.AI_CHAT_PROVIDER || 'gemini').toLowerCase(),
+
+  // Google Gemini API (Respostas e Embeddings)
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
   GEMINI_GENERATIVE_MODEL: process.env.GEMINI_GENERATIVE_MODEL || 'gemini-3.8-flash',
   GENERATION_TIMEOUT_MS: Number(process.env.GENERATION_TIMEOUT_MS) || 30_000,
+
+  // Ollama (Local LLM para geração de respostas do Chat RAG)
+  OLLAMA_BASE_URL: (process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').replace(/\/+$/, ''),
+  OLLAMA_CHAT_MODEL: process.env.OLLAMA_CHAT_MODEL || 'llama3.2',
+  OLLAMA_TIMEOUT_MS: Number(process.env.OLLAMA_TIMEOUT_MS) || 60_000,
 
   // Armazenamento Seguro de Livros
   BOOKS_STORAGE_DIR:

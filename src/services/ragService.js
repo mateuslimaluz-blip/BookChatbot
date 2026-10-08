@@ -39,7 +39,7 @@ export async function retrieveRelevantChunks(
     bookId = null,
     candidateK = CANDIDATE_K,
     topK = TOP_K,
-    minSimilarity = MIN_SIMILARITY,
+    minSimilarity = undefined,
     embeddingFn = generateQueryEmbedding,
     dbInstance = db,
   } = {}
@@ -113,6 +113,13 @@ export async function retrieveRelevantChunks(
   const candidates = await baseQuery.orderBy(asc(distanceExpr)).limit(candidateK);
 
   // 6. Processamento dos candidatos: cálculo de similaridade e aplicação de limiar
+  const effectiveMinSimilarity =
+    minSimilarity !== undefined
+      ? minSimilarity
+      : bookId
+      ? Math.min(MIN_SIMILARITY, 0.25)
+      : MIN_SIMILARITY;
+
   const filteredResults = [];
 
   for (const row of candidates) {
@@ -122,7 +129,7 @@ export async function retrieveRelevantChunks(
     const distance = Number.isFinite(rawDistance) ? rawDistance : 1;
     const similarity = Number.isFinite(rawSimilarity) ? rawSimilarity : 1 - distance;
 
-    if (similarity >= minSimilarity) {
+    if (similarity >= effectiveMinSimilarity) {
       filteredResults.push({
         id: row.id,
         bookId: row.bookId,
@@ -205,6 +212,80 @@ ${item.content.trim()}`;
     contextText: formattedSections.join('\n\n---\n\n'),
     sourcesMap,
   };
+}
+
+/**
+ * Identifica se a pergunta do usuário é sobre a identidade, provedor ou modelo de inteligência artificial
+ * configurado no BookChatbot (ex: "Em qual IA você é baseada?", "Qual modelo de IA você usa?", "Qual IA você usa?").
+ *
+ * @param {string} query
+ * @returns {boolean}
+ */
+export function isIdentityOrModelQuery(query) {
+  if (!query || typeof query !== 'string') return false;
+
+  const norm = query
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!norm) return false;
+
+  // Termos típicos de busca de enredo/conteúdo literário
+  const contentKeywords = [
+    'capitulo', 'personagem', 'enredo', 'resumo', 'resuma', 'sinopse',
+    'significa', 'acontece', 'morre', 'morte', 'citacao', 'cite', 'frase',
+    'estrategia', 'vencer', 'guerra'
+  ];
+
+  if (contentKeywords.some((kw) => norm.includes(kw))) {
+    return false;
+  }
+
+  const identityOrModelPatterns = [
+    /(?:em\s+)?qual\s+(?:ia|inteligencia\s+artificial|modelo|llm)\s+(?:voce\s+)?(?:e\s+)?(?:baseada|baseado|utiliza|usa|roda|funciona)/,
+    /(?:voce\s+)?(?:e\s+|usa\s+)?(?:baseada|baseado)\s+em\s+(?:qual|que)\s+(?:ia|inteligencia\s+artificial|modelo|llm)/,
+    /(?:qual|que)\s+(?:ia|inteligencia\s+artificial|modelo|llm)(?:\s+de\s+ia)?\s+(?:voce\s+)?(?:usa|utiliza|e|voce\s+e)/,
+    /(?:qual|que)\s+(?:e\s+)?(?:o\s+)?(?:seu\s+)?(?:modelo|llm|provedor)(?:\s+de\s+ia)?/,
+    /(?:qual|que)\s+(?:tecnologia|motor)\s+(?:de\s+ia\s+)?(?:voce\s+)?(?:usa|utiliza|e\s+usado|e\s+usada)/,
+    /(?:voce\s+)?(?:e\s+|usa\s+)?(?:o\s+)?(?:chatgpt|gemini|ollama|llama|claude|deepseek|gpt)/,
+    /(?:qual\s+ia\s+esta\s+configurada|qual\s+provedor\s+esta\s+configurado)/,
+    /(?:como\s+suas\s+respostas\s+sao\s+geradas|quem\s+gera\s+(?:as\s+)?(?:suas\s+)?respostas)/,
+    /(?:qual\s+modelo\s+gera\s+(?:as\s+)?respostas|qual\s+modelo\s+(?:gera\s+os\s+)?embeddings)/,
+    /^qual\s+ia\s+voce\s+e\??$/,
+    /^(?:voce\s+)?usa\s+qual\s+(?:ia|modelo|llm)\??$/,
+    /^(?:em\s+)?qual\s+ia\s+voce\s+e\s+(?:baseada|baseado)\??$/
+  ];
+
+  return identityOrModelPatterns.some((pattern) => pattern.test(norm));
+}
+
+/**
+ * Retorna a resposta direta informando a arquitetura e modelos ativos no BookChatbot,
+ * inspecionando diretamente as variáveis de ambiente sem invocar nenhum modelo ou busca vetorial.
+ *
+ * @returns {string}
+ */
+export function formatModelConfigAnswer() {
+  const provider = (env.AI_CHAT_PROVIDER || 'gemini').toLowerCase();
+  const ollamaModel = env.OLLAMA_CHAT_MODEL || 'llama3.2';
+  const geminiGenModel = env.GEMINI_GENERATIVE_MODEL || 'gemini-3.8-flash';
+  const embeddingModel = 'gemini-embedding-2';
+
+  if (provider === 'ollama') {
+    return `Eu sou o assistente do BookChatbot e utilizo uma arquitetura híbrida de inteligência artificial:
+
+- **Geração de respostas:** Ollama local com o modelo **${ollamaModel}**;
+- **Busca vetorial (Embeddings):** Google Gemini com o modelo **${embeddingModel}** para gerar os embeddings das perguntas e dos trechos das obras.`;
+  }
+
+  return `Eu sou o assistente do BookChatbot e opero com a infraestrutura do Google Gemini:
+
+- **Geração de respostas:** Google Gemini com o modelo **${geminiGenModel}**;
+- **Busca vetorial (Embeddings):** Google Gemini com o modelo **${embeddingModel}** para gerar os embeddings das perguntas e dos trechos das obras.`;
 }
 
 /**
@@ -464,6 +545,81 @@ export function formatCatalogAnswer(
 }
 
 /**
+ * Tenta identificar se a pergunta do usuário referencia explicitamente uma obra ou autor
+ * específico do catálogo cadastrado no banco, retornando o bookId correspondente.
+ * Útil para desambiguação e filtro de escopo quando o usuário faz perguntas com bookId nulo ("Acervo Geral").
+ *
+ * @param {string} query - Pergunta do usuário
+ * @param {object} [dbInstance=db]
+ * @returns {Promise<string|null>} bookId encontrado ou null
+ */
+export async function resolveBookIdFromQuery(query, dbInstance = db) {
+  if (!query || typeof query !== 'string') return null;
+
+  const normQuery = query
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normQuery) return null;
+
+  try {
+    const allBooks = await dbInstance
+      .select({
+        id: books.id,
+        title: books.title,
+        author: books.author,
+      })
+      .from(books);
+
+    for (const book of allBooks) {
+      const normTitle = (book.title || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      const normAuthor = (book.author || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      // Verifica correspondência exata do título no texto (ex: "dracula", "dom casmurro")
+      if (normTitle && normTitle.length >= 3 && normQuery.includes(normTitle)) {
+        return book.id;
+      }
+
+      // Verifica palavras significativas do título (ex: "memorias postumas", "bras cubas", "arte da guerra")
+      const titleWords = normTitle.split(' ').filter((w) => w.length >= 4);
+      if (titleWords.length > 0 && titleWords.every((w) => normQuery.includes(w))) {
+        return book.id;
+      }
+
+      // Se o autor foi citado (ex: "bram stoker", "stoker", "machado de assis", "sun tzu")
+      if (normAuthor && normAuthor.length >= 4 && normQuery.includes(normAuthor)) {
+        return book.id;
+      }
+      const authorLastName = normAuthor.split(' ').pop();
+      if (authorLastName && authorLastName.length >= 5 && normQuery.includes(authorLastName)) {
+        return book.id;
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+/**
  * Orquestra o fluxo completo do Chat RAG:
  * 1. Validação de entrada;
  * 2. Detecção de perguntas sobre o catálogo de livros disponíveis (respondidas via catálogo real);
@@ -502,7 +658,18 @@ export async function executeRagChat(
     );
   }
 
-  // 2. Se for saudação ou pergunta sobre a função do aplicativo, responde diretamente sem buscar trechos, gerar embedding ou chamar o Gemini
+  // 2. Se for pergunta sobre a identidade, provedor ou modelo de IA do BookChatbot, responde diretamente com as configs ativas
+  if (isIdentityOrModelQuery(cleanQuery)) {
+    const answer = formatModelConfigAnswer();
+    return {
+      success: true,
+      query: cleanQuery,
+      answer,
+      sources: [],
+    };
+  }
+
+  // 3. Se for saudação ou pergunta sobre a função do aplicativo, responde diretamente sem buscar trechos, gerar embedding ou chamar o modelo
   if (isGreetingOrHelpQuery(cleanQuery)) {
     let selectedBookTitle = null;
     if (bookId) {
@@ -527,7 +694,7 @@ export async function executeRagChat(
     };
   }
 
-  // 3. Se a pergunta for sobre os livros do acervo / catálogo disponíveis, responde pelo catálogo cadastrado
+  // 4. Se a pergunta for sobre os livros do acervo / catálogo disponíveis, responde pelo catálogo cadastrado
   if (isCatalogQuery(cleanQuery)) {
     const catalog = await getCatalogStatus(dbInstance);
     const answer = formatCatalogAnswer(catalog, { selectedBookId: bookId });
@@ -546,10 +713,20 @@ export async function executeRagChat(
     };
   }
 
-  // 3. Executa a recuperação vetorial de trechos
-  const retrievalResult = await retrievalFn(cleanQuery, { bookId, dbInstance });
+  // 5. Se não houver bookId fornecido, tenta inferir a obra a partir da pergunta do usuário
+  let effectiveBookId = bookId || null;
+  if (!effectiveBookId) {
+    try {
+      effectiveBookId = await resolveBookIdFromQuery(cleanQuery, dbInstance);
+    } catch {
+      effectiveBookId = null;
+    }
+  }
 
-  // 4. Se não houver resultados relevantes acima do limiar, retorna fallback seguro
+  // 6. Executa a recuperação vetorial de trechos
+  const retrievalResult = await retrievalFn(cleanQuery, { bookId: effectiveBookId, dbInstance });
+
+  // 7. Se não houver resultados relevantes acima do limiar, retorna fallback seguro
   if (!retrievalResult.results || retrievalResult.results.length === 0) {
     return {
       success: true,
@@ -559,7 +736,7 @@ export async function executeRagChat(
     };
   }
 
-  // 5. Monta o contexto delimitado
+  // 8. Monta o contexto delimitado
   const { contextText, sourcesMap } = buildContextFromChunks(retrievalResult.results);
 
   if (!contextText) {
@@ -571,32 +748,95 @@ export async function executeRagChat(
     };
   }
 
-  // 6. Invoca o modelo generativo
+  // 9. Invoca o modelo generativo
   const modelResponse = await generateFn({
     query: retrievalResult.query,
     context: contextText,
   });
 
-  // 7. Valida e reconcilia as fontes citadas com os metadados reais
+  // 10. Valida e reconcilia as fontes citadas com os metadados reais
   const validatedSources = [];
   const addedSourceIds = new Set();
 
-  if (Array.isArray(modelResponse.citations)) {
-    for (const citationId of modelResponse.citations) {
-      if (sourcesMap.has(citationId) && !addedSourceIds.has(citationId)) {
-        validatedSources.push(sourcesMap.get(citationId));
-        addedSourceIds.add(citationId);
+  const candidateCitationIds = [];
+  if (Array.isArray(modelResponse.citations) && modelResponse.citations.length > 0) {
+    candidateCitationIds.push(...modelResponse.citations);
+  }
+
+  // Se o modelo não preencheu o array de citations, busca citações inline no texto da resposta (ex: [1], [Fonte 1], [0])
+  if (candidateCitationIds.length === 0 && modelResponse.answer) {
+    const inlineMatches = [...modelResponse.answer.matchAll(/\[(?:fonte\s*)?(\d+)\]/gi)];
+    for (const match of inlineMatches) {
+      const parsedNum = parseInt(match[1], 10);
+      if (Number.isInteger(parsedNum)) {
+        candidateCitationIds.push(parsedNum);
       }
     }
   }
 
-  const finalSources =
-    validatedSources.length > 0 ? validatedSources : Array.from(sourcesMap.values());
+  for (const citationId of candidateCitationIds) {
+    // A. Casamento direto por sourceId (1, 2, 3...)
+    if (sourcesMap.has(citationId) && !addedSourceIds.has(citationId)) {
+      validatedSources.push(sourcesMap.get(citationId));
+      addedSourceIds.add(citationId);
+      continue;
+    }
+
+    // B. Casamento base 0 (se o modelo citou 0, mapeia para a primeira fonte ou fonte com chunkIndex 0)
+    if (citationId === 0) {
+      let matchedZero = null;
+      for (const src of sourcesMap.values()) {
+        if (src.chunkIndex === 0) {
+          matchedZero = src;
+          break;
+        }
+      }
+      if (!matchedZero && sourcesMap.has(1)) {
+        matchedZero = sourcesMap.get(1);
+      }
+      if (matchedZero && !addedSourceIds.has(matchedZero.sourceId)) {
+        validatedSources.push(matchedZero);
+        addedSourceIds.add(matchedZero.sourceId);
+        continue;
+      }
+    }
+
+    // C. Casamento por chunkIndex (caso o modelo tenha citado o chunkIndex direto)
+    for (const [sId, source] of sourcesMap.entries()) {
+      if (source.chunkIndex === citationId && !addedSourceIds.has(sId)) {
+        validatedSources.push(source);
+        addedSourceIds.add(sId);
+        break;
+      }
+    }
+  }
+
+  // Verifica se a resposta afirma expressamente que a informação não foi encontrada nas obras disponíveis
+  const isNotFoundAnswer =
+    /não encontrei (essa |esta )?informação|não foi possível encontrar|informação suficiente não encontrada|não encontrei menção|não consta nas obras disponíveis|não há menção/i.test(
+      modelResponse.answer || ''
+    );
+
+  let finalAnswer = modelResponse.answer || NO_CONTEXT_FALLBACK_ANSWER;
+  let finalSources = [];
+
+  if (isNotFoundAnswer) {
+    // Quando o modelo declara que não encontrou a informação, mantém a declaração e não anexa fontes irrelevantes
+    finalSources = [];
+  } else if (validatedSources.length > 0) {
+    // Preserva rigorosamente as fontes reais citadas e validadas pelo modelo que comprovam a afirmação
+    finalSources = validatedSources;
+  } else {
+    // Se os trechos recuperados não sustentarem a afirmação (nenhuma fonte válida do contexto foi citada),
+    // o chatbot declara que não encontrou essa informação nos livros, sem completar com conhecimento geral
+    finalAnswer = NO_CONTEXT_FALLBACK_ANSWER;
+    finalSources = [];
+  }
 
   return {
     success: true,
     query: retrievalResult.query,
-    answer: modelResponse.answer || NO_CONTEXT_FALLBACK_ANSWER,
+    answer: finalAnswer,
     sources: finalSources,
   };
 }

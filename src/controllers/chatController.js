@@ -97,6 +97,16 @@ export async function chatHandler(request, reply) {
       });
     }
 
+    // Tratamento de erros do Ollama (indisponibilidade, modelo ausente, timeout)
+    if (error.isOllamaError) {
+      const statusCode = error.statusCode || 503;
+      return reply.status(statusCode).send({
+        success: false,
+        code: error.code || 'OLLAMA_ERROR',
+        error: error.message,
+      });
+    }
+
     // Tratamento de limite de taxa / cota excedida (HTTP 429)
     const is429 =
       error.status === 429 ||
