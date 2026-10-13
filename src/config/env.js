@@ -43,7 +43,7 @@ export const env = {
   MAX_CONTEXT_CHARS: Number(process.env.MAX_CONTEXT_CHARS) || 25_000,
 
   // Timeouts e Limites HTTP Fastify (connectionTimeout do socket Node.js)
-  HTTP_HANDLER_TIMEOUT_MS: Number(process.env.HTTP_HANDLER_TIMEOUT_MS) || 45_000,
+  HTTP_HANDLER_TIMEOUT_MS: Number(process.env.HTTP_HANDLER_TIMEOUT_MS) || 120_000,
   HTTP_BODY_LIMIT_BYTES: Number(process.env.HTTP_BODY_LIMIT_BYTES) || 1_048_576, // 1MB global
   HTTP_JSON_BODY_LIMIT_BYTES: Number(process.env.HTTP_JSON_BODY_LIMIT_BYTES) || 65_536, // 64KB para rotas JSON
 

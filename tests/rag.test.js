@@ -561,6 +561,181 @@ test('12. Comparação RAG entre Drácula e Memórias Póstumas de Brás Cubas',
   });
 });
 
+test('13. Regressão de Fundamentação Estrita em Brás Cubas (Pentateuco, Trecho 81, Resenha/Enredo)', async (t) => {
+  const brasChunk2 = {
+    id: 'chunk-bras-2',
+    bookId: '0be14b7e-0cde-4a94-9710-75b864b8306f',
+    title: 'Memórias Póstumas de Brás Cubas',
+    author: 'Machado de Assis',
+    chunkIndex: 2,
+    content: 'Moisés, que também contou a sua morte, não a pôs no intróito, mas no cabo: diferença radical entre este livro e o Pentateuco. Dito isto, expirei às duas horas...',
+  };
+
+  const brasChunk81 = {
+    id: 'chunk-bras-81',
+    bookId: '0be14b7e-0cde-4a94-9710-75b864b8306f',
+    title: 'Memórias Póstumas de Brás Cubas',
+    author: 'Machado de Assis',
+    chunkIndex: 81,
+    content: 'Dona Plácida não gostava de falar no passado... costureira e doceira... o amor de Virgília e Brás Cubas.',
+  };
+
+  const brasIntroChunks = [
+    {
+      id: 'chunk-bras-0',
+      bookId: '0be14b7e-0cde-4a94-9710-75b864b8306f',
+      title: 'Memórias Póstumas de Brás Cubas',
+      author: 'Machado de Assis',
+      chunkIndex: 0,
+      content: 'Memórias Póstumas de Brás Cubas. Ao verme que primeiro roeu as frias carnes do meu cadáver dedico como saudosa lembrança. Trata-se de uma obra difusa...',
+    },
+    {
+      id: 'chunk-bras-1',
+      bookId: '0be14b7e-0cde-4a94-9710-75b864b8306f',
+      title: 'Memórias Póstumas de Brás Cubas',
+      author: 'Machado de Assis',
+      chunkIndex: 1,
+      content: 'O que faz do meu Brás Cubas um autor particular é o que ele chama rabugens de pessimismo. Escrevi-a com a pena da galhofa e a tinta da melancolia. Eu não sou propriamente um autor defunto, mas um defunto autor.',
+    },
+  ];
+
+  await t.test('1. deve rejeitar resposta que confunda Machado de Assis com Brás Cubas dizendo ser relato da vida do autor', async () => {
+    const response = await executeRagChat('Faça uma resenha desse livro', {
+      bookId: '0be14b7e-0cde-4a94-9710-75b864b8306f',
+      retrievalFn: async () => ({
+        query: 'Faça uma resenha desse livro',
+        results: [brasChunk2],
+        totalResults: 1,
+      }),
+      generateFn: async () => ({
+        answer: 'O livro aborda o relato da vida do autor Machado de Assis, incluindo suas experiências pessoais.',
+        citations: [1],
+      }),
+    });
+
+    assert.equal(response.success, true);
+    assert.equal(response.answer, NO_CONTEXT_FALLBACK_ANSWER);
+    assert.deepEqual(response.sources, []);
+  });
+
+  await t.test('2. deve rejeitar resposta que confunda a morte do personagem com a do escritor ("O autor morreu em 1869 aos 64 anos")', async () => {
+    const response = await executeRagChat('Faça uma resenha desse livro', {
+      bookId: '0be14b7e-0cde-4a94-9710-75b864b8306f',
+      retrievalFn: async () => ({
+        query: 'Faça uma resenha desse livro',
+        results: [brasChunk2],
+        totalResults: 1,
+      }),
+      generateFn: async () => ({
+        answer: 'O autor morreu em 1869, aos 64 anos, e o livro narra essa trajetória.',
+        citations: [1],
+      }),
+    });
+
+    assert.equal(response.success, true);
+    assert.equal(response.answer, NO_CONTEXT_FALLBACK_ANSWER);
+    assert.deepEqual(response.sources, []);
+  });
+
+  await t.test('3. deve rejeitar alegação de que o livro foi publicado postumamente sem fonte que comprove', async () => {
+    const response = await executeRagChat('Faça uma resenha desse livro', {
+      bookId: '0be14b7e-0cde-4a94-9710-75b864b8306f',
+      retrievalFn: async () => ({
+        query: 'Faça uma resenha desse livro',
+        results: brasIntroChunks,
+        totalResults: 2,
+      }),
+      generateFn: async () => ({
+        answer: 'A obra de Machado de Assis é célebre e o livro foi publicado postumamente após a morte do autor.',
+        citations: [1],
+      }),
+    });
+
+    assert.equal(response.success, true);
+    assert.equal(response.answer, NO_CONTEXT_FALLBACK_ANSWER);
+    assert.deepEqual(response.sources, []);
+  });
+
+  await t.test('4. deve recusar definições externas não explicadas pelos trechos (alucinação do Pentateuco)', async () => {
+    const response = await executeRagChat('O que é pentateuco', {
+      bookId: '0be14b7e-0cde-4a94-9710-75b864b8306f',
+      retrievalFn: async () => ({
+        query: 'O que é pentateuco',
+        results: [brasChunk2],
+        totalResults: 1,
+      }),
+      generateFn: async () => ({
+        answer: 'O pentateuco foi escrito por Moisés, Jérusalem, e outros profetas bíblicos.',
+        citations: [1],
+      }),
+    });
+
+    assert.equal(response.success, true);
+    assert.equal(response.answer, NO_CONTEXT_FALLBACK_ANSWER);
+    assert.deepEqual(response.sources, []);
+  });
+
+  await t.test('5. deve responder com uma resenha curta clara em 3 a 5 frases quando os trechos dão suporte real', async () => {
+    const response = await executeRagChat('Faça uma resenha curta desse livro', {
+      bookId: '0be14b7e-0cde-4a94-9710-75b864b8306f',
+      retrievalFn: async () => ({
+        query: 'Faça uma resenha curta desse livro',
+        results: brasIntroChunks,
+        totalResults: 2,
+      }),
+      generateFn: async () => ({
+        answer: 'Memórias Póstumas de Brás Cubas foi escrito por Machado de Assis. A narrativa é conduzida por Brás Cubas, um defunto autor que escreve sua própria história a partir do túmulo. O narrador dedica a obra com a pena da galhofa e a tinta da melancolia ao verme que roeu seu cadáver.',
+        citations: [1, 2],
+      }),
+    });
+
+    assert.equal(response.success, true);
+    assert.match(response.answer, /Machado de Assis/);
+    assert.match(response.answer, /defunto autor/);
+    assert.equal(response.sources.length, 2);
+    assert.equal(response.sources[0].chunkIndex, 0);
+    assert.equal(response.sources[1].chunkIndex, 1);
+  });
+
+  await t.test('deve rejeitar resposta citando trecho espúrio que não possui os termos da afirmação (trecho 81)', async () => {
+    const response = await executeRagChat('Fale sobre o Livro', {
+      bookId: '0be14b7e-0cde-4a94-9710-75b864b8306f',
+      retrievalFn: async () => ({
+        query: 'Fale sobre o Livro',
+        results: [brasChunk81],
+        totalResults: 1,
+      }),
+      generateFn: async () => ({
+        answer: 'O livro "livro" é uma obra que difere radicalmente do Pentateuco.',
+        citations: [1],
+      }),
+    });
+
+    assert.equal(response.success, true);
+    assert.equal(response.answer, NO_CONTEXT_FALLBACK_ANSWER);
+    assert.deepEqual(response.sources, []);
+  });
+
+  await t.test('deve retornar fallback sem fontes para pergunta de resumo/resenha se os trechos recuperados forem insuficientes', async () => {
+    const response = await executeRagChat('Sobre o que o livro fala?', {
+      bookId: '0be14b7e-0cde-4a94-9710-75b864b8306f',
+      retrievalFn: async () => ({
+        query: 'Sobre o que o livro fala?',
+        results: [brasChunk81],
+        totalResults: 1,
+      }),
+      generateFn: async () => ({
+        answer: 'Não encontrei essa informação nas obras disponíveis.',
+        citations: [],
+      }),
+    });
+
+    assert.equal(response.success, true);
+    assert.equal(response.answer, 'Não encontrei essa informação nas obras disponíveis.');
+    assert.deepEqual(response.sources, []);
+  });
+});
+
 test.after(async () => {
   await pool.end();
 });

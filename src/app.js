@@ -41,7 +41,7 @@ export function buildApp(options = {}) {
       },
     },
     bodyLimit: env.HTTP_BODY_LIMIT_BYTES,
-    connectionTimeout: env.HTTP_HANDLER_TIMEOUT_MS, // Configura Node.js server.connectionTimeout (inatividade no socket), não o tempo do handler
+    connectionTimeout: Math.max(env.HTTP_HANDLER_TIMEOUT_MS, 120_000), // Garante margem para geração de resposta por modelos locais (Ollama) sem encerramento prematuro do socket pelo Node.js
     ...options,
   });
 
